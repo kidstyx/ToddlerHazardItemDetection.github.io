@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Toddler Hazard Detector</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans, 'Segoe UI', sans-serif);
+    background: #f7f7f5;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+  :root {
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+  }
+  .navbar {
+    background: #1c1c1e;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 10px; }
+  .nav-brand .brand-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: #ff3b30; display: flex; align-items: center; justify-content: center;
+  }
+  .nav-brand .brand-icon i { font-size: 18px; color: #fff; }
+  .nav-brand .brand-name { font-size: 15px; font-weight: 500; }
+  .nav-brand .brand-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
+  .refresh-btn {
+    background: rgba(255,255,255,0.1);
+    border: 0.5px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 7px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    transition: background 0.15s;
+  }
+  .refresh-btn:hover { background: rgba(255,255,255,0.18); }
+  .page { max-width: 680px; margin: 0 auto; padding: 24px 20px; }
+  .status-bar {
+    background: #fff;
+    border: 0.5px solid #e0ddd5;
+    border-radius: var(--radius-lg);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #d1d0c8; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.ready { background: #30d158; }
+  .status-dot.danger { background: #ff3b30; animation: pulse-red 1s infinite; }
+  .status-dot.scanning { background: #0a84ff; animation: pulse-blue 1.2s infinite; }
+  @keyframes pulse-red { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  @keyframes pulse-blue { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .status-text { font-size: 13px; color: #555; flex: 1; }
+  .status-text strong { color: #1a1a1a; font-weight: 500; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .ctrl-btn {
+    background: #fff;
+    border: 0.5px solid #e0ddd5;
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: left;
+  }
+  .ctrl-btn:hover { background: #f5f4ef; border-color: #c8c5bc; }
+  .ctrl-btn.active { border-color: #0a84ff; background: #f0f6ff; }
+  .ctrl-btn .btn-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 20px;
+  }
+  .ctrl-btn.webcam .btn-icon { background: #ffe5e3; color: #ff3b30; }
+  .ctrl-btn.upload .btn-icon { background: #e3f2e0; color: #30d158; }
+  .ctrl-btn .btn-label { font-size: 14px; font-weight: 500; }
+  .ctrl-btn .btn-sub { font-size: 11px; color: #888; margin-top: 1px; }
+  .viewer-card {
+    background: #1c1c1e;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: 20px;
+    position: relative;
+    aspect-ratio: 4/3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .viewer-placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    color: rgba(255,255,255,0.35);
+  }
+  .viewer-placeholder i { font-size: 52px; }
+  .viewer-placeholder p { font-size: 13px; }
+  #viewer-inner { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  #viewer-inner canvas, #viewer-inner img { width: 100%; height: 100%; object-fit: cover; }
+  .hazard-overlay {
+    position: absolute; inset: 0;
+    border-radius: var(--radius-xl);
+    border: 3px solid #ff3b30;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .hazard-overlay.show { opacity: 1; animation: border-pulse 1s infinite; }
+  @keyframes border-pulse { 0%,100% { border-color: #ff3b30; } 50% { border-color: rgba(255,59,48,0.4); } }
+  .hazard-badge {
+    position: absolute; top: 12px; left: 12px;
+    background: #ff3b30; color: #fff;
+    font-size: 12px; font-weight: 500;
+    padding: 5px 10px; border-radius: 6px;
+    display: flex; align-items: center; gap: 5px;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .hazard-badge.show { opacity: 1; }
+  .safe-badge {
+    position: absolute; top: 12px; left: 12px;
+    background: #30d158; color: #fff;
+    font-size: 12px; font-weight: 500;
+    padding: 5px 10px; border-radius: 6px;
+    display: flex; align-items: center; gap: 5px;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .safe-badge.show { opacity: 1; }
+  .predictions-header {
+    font-size: 11px; font-weight: 500; color: #888;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .prediction-row {
+    background: #fff;
+    border: 0.5px solid #e0ddd5;
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .pred-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .pred-name { font-size: 14px; font-weight: 500; }
+  .pred-pct { font-size: 14px; font-weight: 500; color: #555; }
+  .pred-bar-bg { height: 5px; background: #f0ede5; border-radius: 10px; overflow: hidden; }
+  .pred-bar-fill {
+    height: 100%; border-radius: 10px;
+    background: #d1d0c8;
+    transition: width 0.4s ease, background 0.4s;
+    width: 0%;
+  }
+  .pred-bar-fill.hazardous { background: #ff3b30; }
+  .pred-bar-fill.safe-fill { background: #30d158; }
+  .alert-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: #ff3b30; color: #fff;
+    padding: 12px 20px; border-radius: var(--radius-lg);
+    font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+    transition: transform 0.3s ease;
+    z-index: 100; white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(255,59,48,0.35);
+  }
+  .alert-toast.show { transform: translateX(-50%) translateY(0); }
+  input[type="file"] { display: none; }
+  .section-label {
+    font-size: 11px; font-weight: 500; color: #888;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="brand-icon"><i class="ti ti-shield-check"></i></div>
+    <div>
+      <div class="brand-name">Hazard Detector</div>
+      <div class="brand-sub">Toddler Safety AI</div>
+    </div>
+  </div>
+  <button class="refresh-btn" onclick="resetApp()">
+    <i class="ti ti-refresh"></i> Reset
+  </button>
+</nav>
+
+<div class="page">
+  <div class="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-text" id="status-text">
+      Ready to scan. <strong>Select webcam or upload an image</strong> to begin.
+    </div>
+  </div>
+
+  <p class="section-label">Input source</p>
+  <div class="controls">
+    <button class="ctrl-btn webcam" id="webcam-btn" onclick="startWebcam()">
+      <div class="btn-icon"><i class="ti ti-camera"></i></div>
+      <div>
+        <div class="btn-label">Webcam</div>
+        <div class="btn-sub">Live detection</div>
+      </div>
+    </button>
+    <button class="ctrl-btn upload" id="upload-btn" onclick="triggerUpload()">
+      <div class="btn-icon"><i class="ti ti-photo-up"></i></div>
+      <div>
+        <div class="btn-label">Upload image</div>
+        <div class="btn-sub">Scan a photo</div>
+      </div>
+    </button>
+    <input type="file" id="image-upload" accept="image/*" onchange="handleImageUpload(event)">
+  </div>
+
+  <div class="viewer-card" id="viewer-card">
+    <div class="viewer-placeholder" id="viewer-placeholder">
+      <i class="ti ti-eye-off"></i>
+      <p>No feed active</p>
+    </div>
+    <div id="viewer-inner" style="display:none;"></div>
+    <div class="hazard-overlay" id="hazard-overlay"></div>
+    <div class="hazard-badge" id="hazard-badge"><i class="ti ti-alert-triangle"></i> Hazard detected</div>
+    <div class="safe-badge" id="safe-badge"><i class="ti ti-circle-check"></i> Area is safe</div>
+  </div>
+
+  <p class="predictions-header">Detection confidence</p>
+  <div id="label-container"></div>
+</div>
+
+<div class="alert-toast" id="alert-toast">
+  <i class="ti ti-alert-triangle"></i>
+  <span id="alert-msg">Hazard detected! Keep toddlers away.</span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+<script>
+  const MODEL_URL = "https://teachablemachine.withgoogle.com/models/IGd0t-L53/";
+  let model, webcam, maxPredictions;
+  let isWebcamRunning = false, animationId, toastTimer;
+
+  function setStatus(type, msg) {
+    document.getElementById('status-dot').className = 'status-dot ' + (type || '');
+    document.getElementById('status-text').innerHTML = msg;
+  }
+
+  async function initModel() {
+    if (model) return;
+    setStatus('scanning', 'Loading AI model…');
+    model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+    maxPredictions = model.getTotalClasses();
+    const lc = document.getElementById('label-container');
+    lc.innerHTML = '';
+    for (let i = 0; i < maxPredictions; i++) {
+      lc.innerHTML += `<div class="prediction-row"><div class="pred-top"><span class="pred-name" id="pred-name-${i}">—</span><span class="pred-pct" id="pred-pct-${i}">—</span></div><div class="pred-bar-bg"><div class="pred-bar-fill" id="pred-bar-${i}"></div></div></div>`;
+    }
+  }
+
+  async function startWebcam() {
+    await initModel();
+    stopWebcam();
+    document.getElementById('webcam-btn').classList.add('active');
+    document.getElementById('upload-btn').classList.remove('active');
+    setStatus('scanning', 'Webcam active — <strong>scanning in real time</strong>');
+    webcam = new tmImage.Webcam(400, 400, true);
+    await webcam.setup();
+    await webcam.play();
+    isWebcamRunning = true;
+    showViewer();
+    document.getElementById('viewer-inner').appendChild(webcam.canvas);
+    requestAnimationFrame(loop);
+  }
+
+  function stopWebcam() {
+    isWebcamRunning = false;
+    if (webcam) { webcam.stop(); webcam = null; }
+    if (animationId) cancelAnimationFrame(animationId);
+  }
+
+  async function loop() {
+    if (!isWebcamRunning) return;
+    webcam.update();
+    await predict(webcam.canvas);
+    animationId = requestAnimationFrame(loop);
+  }
+
+  function showViewer() {
+    document.getElementById('viewer-placeholder').style.display = 'none';
+    document.getElementById('viewer-inner').style.display = 'flex';
+  }
+
+  function triggerUpload() { document.getElementById('image-upload').click(); }
+
+  async function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    await initModel();
+    stopWebcam();
+    document.getElementById('upload-btn').classList.add('active');
+    document.getElementById('webcam-btn').classList.remove('active');
+    setStatus('scanning', 'Analysing uploaded image…');
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+    img.onload = async () => {
+      showViewer();
+      const vi = document.getElementById('viewer-inner');
+      vi.innerHTML = ''; vi.appendChild(img);
+      await predict(img);
+    };
+  }
+
+  function showToast(msg) {
+    clearTimeout(toastTimer);
+    const t = document.getElementById('alert-toast');
+    document.getElementById('alert-msg').textContent = msg;
+    t.classList.add('show');
+    toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  async function predict(el) {
+    const predictions = await model.predict(el);
+    let isHazardous = false, isSafe = false;
+    for (let i = 0; i < maxPredictions; i++) {
+      const pct = Math.round(predictions[i].probability * 100);
+      const name = predictions[i].className;
+      const isH = name.toLowerCase().includes('hazardous') && !name.toLowerCase().includes('non');
+      const isS = name.toLowerCase().includes('non-hazardous') || name.toLowerCase().includes('safe');
+      document.getElementById('pred-name-' + i).textContent = name;
+      document.getElementById('pred-pct-' + i).textContent = pct + '%';
+      const bar = document.getElementById('pred-bar-' + i);
+      bar.style.width = pct + '%';
+      bar.className = 'pred-bar-fill' + (isH && pct > 50 ? ' hazardous' : isS && pct > 50 ? ' safe-fill' : '');
+      if (isH && pct > 70) isHazardous = true;
+      if (isS && pct > 70) isSafe = true;
+    }
+    const overlay = document.getElementById('hazard-overlay');
+    const hb = document.getElementById('hazard-badge');
+    const sb = document.getElementById('safe-badge');
+    if (isHazardous) {
+      overlay.classList.add('show'); hb.classList.add('show'); sb.classList.remove('show');
+      setStatus('danger', '<strong>Hazard detected!</strong> Remove item from toddler reach immediately.');
+      showToast('Hazardous object detected — keep toddlers away!');
+    } else if (isSafe) {
+      overlay.classList.remove('show'); hb.classList.remove('show'); sb.classList.add('show');
+      setStatus('ready', '<strong>Area is safe.</strong> No hazardous items detected.');
+    } else {
+      overlay.classList.remove('show'); hb.classList.remove('show'); sb.classList.remove('show');
+      setStatus('scanning', 'Scanning… analysing confidence levels.');
+    }
+  }
+
+  function resetApp() {
+    stopWebcam();
+    document.getElementById('viewer-placeholder').style.display = 'flex';
+    document.getElementById('viewer-inner').style.display = 'none';
+    document.getElementById('viewer-inner').innerHTML = '';
+    document.getElementById('label-container').innerHTML = '';
+    document.getElementById('hazard-overlay').classList.remove('show');
+    document.getElementById('hazard-badge').classList.remove('show');
+    document.getElementById('safe-badge').classList.remove('show');
+    document.getElementById('alert-toast').classList.remove('show');
+    document.getElementById('webcam-btn').classList.remove('active');
+    document.getElementById('upload-btn').classList.remove('active');
+    document.getElementById('image-upload').value = '';
+    model = null; maxPredictions = null;
+    setStatus('', 'Ready to scan. <strong>Select webcam or upload an image</strong> to begin.');
+  }
+</script>
+</body>
+</html>
