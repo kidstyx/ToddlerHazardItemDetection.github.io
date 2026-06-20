@@ -69,7 +69,8 @@
   @keyframes pulse-blue { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
   .status-text { font-size: 13px; color: #555; flex: 1; }
   .status-text strong { color: #1a1a1a; font-weight: 500; }
-  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
   .ctrl-btn {
     background: #fff;
     border: 0.5px solid #e0ddd5;
@@ -91,6 +92,23 @@
   .ctrl-btn.upload .btn-icon { background: #e3f2e0; color: #30d158; }
   .ctrl-btn .btn-label { font-size: 14px; font-weight: 500; }
   .ctrl-btn .btn-sub { font-size: 11px; color: #888; margin-top: 1px; }
+  
+  /* New Sensitivity Slider Styles */
+  .slider-group {
+    background: #fff;
+    border: 0.5px solid #e0ddd5;
+    border-radius: var(--radius-lg);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+  }
+  .slider-header {
+    display: flex; justify-content: space-between;
+    font-size: 13px; font-weight: 500; margin-bottom: 8px; color: #1a1a1a;
+  }
+  input[type="range"] {
+    width: 100%; accent-color: #0a84ff; cursor: pointer;
+  }
+
   .viewer-card {
     background: #1c1c1e;
     border-radius: var(--radius-xl);
@@ -110,6 +128,7 @@
   .viewer-placeholder p { font-size: 13px; }
   #viewer-inner { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
   #viewer-inner canvas, #viewer-inner img { width: 100%; height: 100%; object-fit: cover; }
+  
   .hazard-overlay {
     position: absolute; inset: 0;
     border-radius: var(--radius-xl);
@@ -120,26 +139,19 @@
   }
   .hazard-overlay.show { opacity: 1; animation: border-pulse 1s infinite; }
   @keyframes border-pulse { 0%,100% { border-color: #ff3b30; } 50% { border-color: rgba(255,59,48,0.4); } }
-  .hazard-badge {
+  
+  .hazard-badge, .safe-badge {
     position: absolute; top: 12px; left: 12px;
-    background: #ff3b30; color: #fff;
-    font-size: 12px; font-weight: 500;
+    color: #fff; font-size: 12px; font-weight: 500;
     padding: 5px 10px; border-radius: 6px;
     display: flex; align-items: center; gap: 5px;
     opacity: 0; transition: opacity 0.3s;
     pointer-events: none;
   }
-  .hazard-badge.show { opacity: 1; }
-  .safe-badge {
-    position: absolute; top: 12px; left: 12px;
-    background: #30d158; color: #fff;
-    font-size: 12px; font-weight: 500;
-    padding: 5px 10px; border-radius: 6px;
-    display: flex; align-items: center; gap: 5px;
-    opacity: 0; transition: opacity 0.3s;
-    pointer-events: none;
-  }
-  .safe-badge.show { opacity: 1; }
+  .hazard-badge { background: #ff3b30; }
+  .safe-badge { background: #30d158; }
+  .hazard-badge.show, .safe-badge.show { opacity: 1; }
+  
   .predictions-header {
     font-size: 11px; font-weight: 500; color: #888;
     text-transform: uppercase; letter-spacing: 0.06em;
@@ -164,6 +176,7 @@
   }
   .pred-bar-fill.hazardous { background: #ff3b30; }
   .pred-bar-fill.safe-fill { background: #30d158; }
+  
   .alert-toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
     background: #ff3b30; color: #fff;
@@ -225,6 +238,14 @@
     <input type="file" id="image-upload" accept="image/*" onchange="handleImageUpload(event)">
   </div>
 
+  <div class="slider-group">
+    <div class="slider-header">
+      <span>AI Sensitivity Threshold</span>
+      <span id="thresh-val">50%</span>
+    </div>
+    <input type="range" id="threshold" min="10" max="95" value="50" oninput="updateThreshold(this.value)">
+  </div>
+
   <div class="viewer-card" id="viewer-card">
     <div class="viewer-placeholder" id="viewer-placeholder">
       <i class="ti ti-eye-off"></i>
@@ -251,6 +272,14 @@
   const MODEL_URL = "https://teachablemachine.withgoogle.com/models/IGd0t-L53/";
   let model, webcam, maxPredictions;
   let isWebcamRunning = false, animationId, toastTimer;
+  
+  // Dynamic threshold replacing the hardcoded 70%
+  let confidenceThreshold = 50; 
+
+  function updateThreshold(val) {
+    confidenceThreshold = parseInt(val);
+    document.getElementById('thresh-val').textContent = val + '%';
+  }
 
   function setStatus(type, msg) {
     document.getElementById('status-dot').className = 'status-dot ' + (type || '');
@@ -275,7 +304,9 @@
     document.getElementById('webcam-btn').classList.add('active');
     document.getElementById('upload-btn').classList.remove('active');
     setStatus('scanning', 'Webcam active — <strong>scanning in real time</strong>');
-    webcam = new tmImage.Webcam(400, 400, true);
+    
+    // The 'true' parameter here automatically square-crops the webcam feed
+    webcam = new tmImage.Webcam(400, 400, true); 
     await webcam.setup();
     await webcam.play();
     isWebcamRunning = true;
@@ -304,6 +335,22 @@
 
   function triggerUpload() { document.getElementById('image-upload').click(); }
 
+  // Helper function to crop uploaded images into a perfect square
+  function cropToSquare(img) {
+    const size = Math.min(img.width, img.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    // Calculate starting points to center the crop
+    const startX = (img.width - size) / 2;
+    const startY = (img.height - size) / 2;
+    
+    ctx.drawImage(img, startX, startY, size, size, 0, 0, size, size);
+    return canvas;
+  }
+
   async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -312,14 +359,19 @@
     document.getElementById('upload-btn').classList.add('active');
     document.getElementById('webcam-btn').classList.remove('active');
     setStatus('scanning', 'Analysing uploaded image…');
+    
     const img = document.createElement('img');
     img.src = URL.createObjectURL(file);
-    img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
     img.onload = async () => {
+      // 1. Show the original image in the UI viewer
       showViewer();
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
       const vi = document.getElementById('viewer-inner');
       vi.innerHTML = ''; vi.appendChild(img);
-      await predict(img);
+      
+      // 2. Crop the image to a square in the background before predicting
+      const squaredCanvas = cropToSquare(img);
+      await predict(squaredCanvas);
     };
   }
 
@@ -334,22 +386,30 @@
   async function predict(el) {
     const predictions = await model.predict(el);
     let isHazardous = false, isSafe = false;
+    
     for (let i = 0; i < maxPredictions; i++) {
       const pct = Math.round(predictions[i].probability * 100);
       const name = predictions[i].className;
       const isH = name.toLowerCase().includes('hazardous') && !name.toLowerCase().includes('non');
       const isS = name.toLowerCase().includes('non-hazardous') || name.toLowerCase().includes('safe');
+      
       document.getElementById('pred-name-' + i).textContent = name;
       document.getElementById('pred-pct-' + i).textContent = pct + '%';
       const bar = document.getElementById('pred-bar-' + i);
       bar.style.width = pct + '%';
-      bar.className = 'pred-bar-fill' + (isH && pct > 50 ? ' hazardous' : isS && pct > 50 ? ' safe-fill' : '');
-      if (isH && pct > 70) isHazardous = true;
-      if (isS && pct > 70) isSafe = true;
+      
+      // Dynamic coloring based on slider threshold
+      bar.className = 'pred-bar-fill' + (isH && pct >= confidenceThreshold ? ' hazardous' : isS && pct >= confidenceThreshold ? ' safe-fill' : '');
+      
+      // Dynamic logic based on slider threshold
+      if (isH && pct >= confidenceThreshold) isHazardous = true;
+      if (isS && pct >= confidenceThreshold) isSafe = true;
     }
+    
     const overlay = document.getElementById('hazard-overlay');
     const hb = document.getElementById('hazard-badge');
     const sb = document.getElementById('safe-badge');
+    
     if (isHazardous) {
       overlay.classList.add('show'); hb.classList.add('show'); sb.classList.remove('show');
       setStatus('danger', '<strong>Hazard detected!</strong> Remove item from toddler reach immediately.');
